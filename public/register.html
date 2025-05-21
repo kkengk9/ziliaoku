@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>註冊帳號</title>
+</head>
+<body>
+  <h2>使用者註冊</h2>
+  <form id="registerForm">
+    <input type="text" name="username" placeholder="帳號" required><br>
+    <input type="password" name="password" placeholder="密碼" required><br>
+    <input type="text" name="student_id" placeholder="學號" required><br>
+    <input type="text" name="name" placeholder="姓名" required><br>
+    <input type="text" name="phone" placeholder="電話" required><br>
+    <input type="email" name="email" placeholder="Email" required><br>
+    <button type="submit">註冊</button>
+  </form>
+
+  <p id="msg"></p>
+
+  <script>
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const form = e.target;
+      const data = {
+        username: form.username.value.trim(),
+        password: form.password.value,
+        student_id: form.student_id.value.trim(),
+        name: form.name.value.trim(),
+        phone: form.phone.value.trim(),
+        email: form.email.value.trim(),
+      };
+
+      try {
+        const res = await fetch('/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        const text = await res.text();
+        const msg = document.getElementById('msg');
+        msg.innerText = text;
+
+        if (res.ok) {
+          msg.style.color = 'green';
+          form.reset();
+        } else {
+          msg.style.color = 'red';
+        }
+      } catch (err) {
+        document.getElementById('msg').innerText = '網路錯誤，請稍後再試';
+        document.getElementById('msg').style.color = 'red';
+      }
+    });
+  </script>
+</body>
+</html>

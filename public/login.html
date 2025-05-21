@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>登入</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 400px; margin: auto; }
+    a { display: inline-block; margin-top: 10px; }
+    #msg { margin-top: 10px; color: red; }
+  </style>
+</head>
+<body>
+  <h2>使用者登入</h2>
+  <form id="loginForm">
+    <input type="text" name="username" placeholder="帳號" required><br><br>
+    <input type="password" name="password" placeholder="密碼" required><br><br>
+    <button type="submit">登入</button>
+  </form>
+
+  <a href="/change-password.html">修改密碼</a>
+  <a href="/change-profile.html">修改個人資訊</a>
+
+
+  <p id="msg"></p>
+
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const data = {
+        username: form.username.value,
+        password: form.password.value
+      };
+
+      const res = await fetch('/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      const text = await res.text();
+      const msg = document.getElementById('msg');
+      msg.innerText = text;
+
+      if (res.ok) {
+        msg.style.color = 'green';
+        // 登入成功後導向 profile（裡面會跳轉聊天室）
+        window.location.href = '/profile';
+      } else {
+        msg.style.color = 'red';
+      }
+    });
+  </script>
+</body>
+</html>
