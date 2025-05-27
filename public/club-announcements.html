@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>公告管理</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    body { padding: 2rem; max-width: 700px; margin: auto; }
+    textarea { resize: vertical; }
+  </style>
+</head>
+<body>
+  <h2 class="mb-4">社團公告管理</h2>
+
+  <div class="mb-3">
+    <label for="clubSelect" class="form-label">選擇社團：</label>
+    <select id="clubSelect" class="form-select"></select>
+  </div>
+
+  <ul class="list-group" id="announcementList"></ul>
+
+  <script>
+    const token = localStorage.getItem('token');
+
+    async function loadMyClubs() {
+      const res = await fetch('/my-clubs', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const clubs = await res.json();
+      const select = document.getElementById('clubSelect');
+      clubs.forEach(c => {
+        if (['president', 'officer'].includes(c.role)) {
+          const opt = document.createElement('option');
+          opt.value = `club-${c.id}`;
+          opt.textContent = `${c.name} (${c.role})`;
+          select.appendChild(opt);
+        }
+      });
+    }
+
+    async function loadAnnouncements(category) {
+      const res = await fetch(`/messages/announcements?category=${encodeURIComponent(category)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const list = document.getElementById('announcementList');
+      list.innerHTML = '';
+      const data = await res.json();
+
+      data.forEach(msg => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item';
+        li.innerHTML = `
+          <div><strong>${msg.username}</strong>（${new Date(msg.timestamp).toLocaleString('zh-TW')}）</div>
+          <textarea class="form-control my-2" rows="2">${msg.content}</textarea>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-success" onclick="updateAnnouncement(${msg.id}, this)">儲存</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteAnnouncement(${msg.id})">刪除</button>
+          </div>`;
+        list.appendChild(li);
+      });
+    }
+
+    async function updateAnnouncement(id, btn) {
+      const content = btn.closest('li').querySelector('textarea').value.trim();
+      if (!content) return alert('內容不得為空');
+
+      const res = await fetch('/messages/update-announcement', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ id, content })
+      });
+      alert(await res.text());
+    }
+
+    async function deleteAnnouncement(id) {
+      if (!confirm('確定要刪除這則公告嗎？')) return;
+      const res = await fetch('/messages/delete-announcement', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ id })
+      });
+      alert(await res.text());
+      document.getElementById('clubSelect').dispatchEvent(new Event('change'));
+    }
+
+    document.getElementById('clubSelect').addEventListener('change', (e) => {
+      loadAnnouncements(e.target.value);
+    });
+
+    loadMyClubs();
+  </script>
+</body>
+</html>

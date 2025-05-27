@@ -30,10 +30,10 @@
 
   <div class="mb-3">
     <label for="category" class="form-label">選擇區域：</label>
-    <select id="category" class="form-select" onchange="loadMessages()">
+    <select id="category" class="form-select">
       <option value="club">社團區</option>
       <option value="event">活動資訊區</option>
-      <option value="academic">學術討論區</option>
+      <option value="academic" selected>學術討論區</option>
     </select>
   </div>
 
@@ -47,63 +47,77 @@
   </form>
 
   <script>
-    async function loadMessages() {
-      const category = document.getElementById('category').value;
-      try {
-        const res = await fetch(`/messages?category=${encodeURIComponent(category)}`);
-        if (!res.ok) {
-          const errText = await res.text();
-          alert('載入訊息失敗：' + errText);
-          return;
-        }
-        const messages = await res.json();
-        const chatBox = document.getElementById('chatBox');
-
-        chatBox.innerHTML = messages.map(msg => {
-          const time = new Date(msg.timestamp).toLocaleString('zh-TW', {
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit'
-          });
-          return `<div class="message">
-            <strong>${msg.username}：</strong>${msg.content}
-            <span class="timestamp">（${time}）</span>
-          </div>`;
-        }).join('');
-        chatBox.scrollTop = chatBox.scrollHeight;
-      } catch (err) {
-        alert('無法連線伺服器。');
-      }
-    }
-
-    document.getElementById('messageForm').addEventListener('submit', async e => {
-      e.preventDefault();
-      const category = document.getElementById('category').value;
-      const content = document.getElementById('message').value.trim();
-      if (!content) {
-        alert('請輸入訊息');
-        return;
-      }
-      try {
-        const res = await fetch('/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ category, content })
-        });
-        if (res.ok) {
-          document.getElementById('message').value = '';
-          loadMessages();
-        } else {
-          const errText = await res.text();
-          alert('發送失敗：' + errText);
-        }
-      } catch {
-        alert('無法送出訊息，請稍後再試');
+    document.getElementById('category').addEventListener('change', function() {
+      if (this.value === 'club') {
+        window.location.href = 'club-admin.html';
+      } else {
+        loadMessages();
       }
     });
+  async function loadMessages() {
+    const category = document.getElementById('category').value;
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`/messages?category=${encodeURIComponent(category)}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        alert('載入訊息失敗：' + errText);
+        return;
+      }
+      const messages = await res.json();
+      const chatBox = document.getElementById('chatBox');
 
-    setInterval(loadMessages, 5000);
-    loadMessages();
-  </script>
+      chatBox.innerHTML = messages.map(msg => {
+        const time = new Date(msg.timestamp).toLocaleString('zh-TW', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit'
+        });
+        return `<div class="message">
+          <strong>${msg.username}：</strong>${msg.content}
+          <span class="timestamp">（${time}）</span>
+        </div>`;
+      }).join('');
+      chatBox.scrollTop = chatBox.scrollHeight;
+    } catch (err) {
+      alert('無法連線伺服器。');
+    }
+  }
+
+  document.getElementById('messageForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const token = localStorage.getItem('token');
+    const category = document.getElementById('category').value;
+    const content = document.getElementById('message').value.trim();
+    if (!content) return alert('請輸入訊息');
+
+    try {
+      const res = await fetch('/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ category, content })
+      });
+      if (res.ok) {
+        document.getElementById('message').value = '';
+        loadMessages();
+      } else {
+        const errText = await res.text();
+        alert('發送失敗：' + errText);
+      }
+    } catch {
+      alert('無法送出訊息，請稍後再試');
+    }
+  });
+
+  setInterval(loadMessages, 5000);
+  loadMessages();
+</script>
 
 </body>
 </html>

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>聊天室</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    body { padding: 2rem; }
+    .chat-box {
+      height: 300px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      padding: 1rem;
+      background: #f8f9fa;
+      margin-bottom: 1rem;
+    }
+    .message {
+      margin-bottom: 0.5rem;
+    }
+    .timestamp {
+      font-size: 0.8em;
+      color: gray;
+      margin-left: 6px;
+    }
+    img { max-width: 100%; margin-top: 4px; }
+  </style>
+</head>
+<body>
+
+  <h2>聊天室</h2>
+
+  <div class="mb-3">
+    <label for="category" class="form-label">選擇區域：</label>
+    <select id="category" class="form-select"></select>
+  </div>
+
+  <div class="mb-3">
+    <label for="viewMode" class="form-label">檢視模式：</label>
+    <select id="viewMode" class="form-select">
+      <option value="chat">聊天區</option>
+      <option value="announcements">公告區</option>
+    </select>
+  </div>
+
+  <div class="form-check mb-3">
+    <input class="form-check-input" type="checkbox" id="isAnnouncement">
+    <label class="form-check-label" for="isAnnouncement">發布為公告（僅社長/幹部可用）</label>
+  </div>
+
+  <div class="chat-box" id="chatBox"></div>
+
+  <form id="messageForm" class="d-flex mb-2">
+    <input type="text" id="message" class="form-control me-2" placeholder="輸入訊息..." required />
+    <button type="submit" class="btn btn-primary">送出</button>
+  </form>
+
+  <form id="uploadForm" class="d-flex align-items-center gap-2">
+    <input type="file" id="fileInput" class="form-control" accept="image/*,.pdf" />
+    <button type="submit" class="btn btn-secondary">上傳檔案</button>
+  </form>
+
+  <script>
+    const token = localStorage.getItem('token');
+
+    async function loadCategories() {
+      const res = await fetch('/my-clubs', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const clubs = await res.json();
+      const sel = document.getElementById('category');
+      sel.innerHTML =
+        '<option value="club" selected>社團區</option>' + 
+        clubs.map((c, i) =>
+          `<option value="club-${c.id}"${i === 0 ? ' selected' : ''}>${c.name}</option>`
+        ).join('') +
+        '<option value="event">活動資訊區</option><option value="academic">學術討論區</option>';
+      loadMessages();
+    }
+
+    async function loadMessages() {
+      const category = document.getElementById('category').value;
+      const mode = document.getElementById('viewMode').value;
+      const endpoint = mode === 'announcements' ? '/messages/announcements' : '/messages';
+
+      const res = await fetch(`${endpoint}?category=${encodeURIComponent(category)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        alert('載入訊息失敗：' + errText);
+        return;
+      }
+      const messages = await res.json();
+      const chatBox = document.getElementById('chatBox');
+
+      chatBox.innerHTML = messages.map(msg => {
+        const time = new Date(msg.timestamp).toLocaleString('zh-TW', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit'
+        });
+        const prefix = msg.is_announcement ? '<span style="color:red">📢公告</span> ' : '';
+        return `<div class="message">
+          ${prefix}<strong>${msg.username}：</strong><br>${msg.content}
+          <span class="timestamp">（${time}）</span>
+        </div>`;
+      }).join('');
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    document.getElementById('category').addEventListener('change', loadMessages);
+    document.getElementById('viewMode').addEventListener('change', loadMessages);
+
+    document.getElementById('messageForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const category = document.getElementById('category').value;
+      const content = document.getElementById('message').value.trim();
+      const is_announcement = document.getElementById('isAnnouncement').checked;
+      if (!content) return alert('請輸入訊息');
+
+      try {
+        const res = await fetch('/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ category, content, is_announcement })
+        });
+        if (res.ok) {
+          document.getElementById('message').value = '';
+          loadMessages();
+        } else {
+          const errText = await res.text();
+          alert('發送失敗：' + errText);
+        }
+      } catch {
+        alert('無法送出訊息，請稍後再試');
+      }
+    });
+
+    document.getElementById('uploadForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const fileInput = document.getElementById('fileInput');
+      if (!fileInput.files[0]) return alert('請選擇檔案');
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      formData.append('category', document.getElementById('category').value);
+
+      try {
+        const res = await fetch('/upload', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData
+        });
+        const result = await res.json();
+        if (res.ok) {
+          alert(result.message);
+          fileInput.value = '';
+          loadMessages();
+        } else {
+          alert(result.message || '上傳失敗');
+        }
+      } catch {
+        alert('檔案上傳失敗，請稍後再試');
+      }
+    });
+
+    loadCategories();
+    document.getElementById('category').addEventListener('change', function() {
+      const val = this.value;
+      if (val === 'event' || val === 'academic') {
+        window.location.href = 'chat.html';
+      } else {
+        loadMessages();
+      }
+    });
+    setInterval(loadMessages, 5000);
+  </script>
+
+</body>
+</html>

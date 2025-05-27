@@ -34,53 +34,60 @@
   </div>
 
   <script>
-    async function loadProfile() {
-      try {
-        const res = await fetch('/profile-data');
-        if (!res.ok) {
-          alert('無法取得個人資料');
-          return;
-        }
-        const data = await res.json();
-        document.getElementById('username').value = data.username || '';
-        document.getElementById('student_id').value = data.student_id || '';
-        document.getElementById('name').value = data.name || '';
-        document.getElementById('phone').value = data.phone || '';
-        document.getElementById('email').value = data.email || '';
-      } catch (err) {
-        alert('伺服器錯誤，請稍後再試');
-      }
+  async function loadProfile() {
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch('/profile-data', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) return alert('無法取得個人資料');
+
+      const data = await res.json();
+      document.getElementById('username').value = data.username || '';
+      document.getElementById('student_id').value = data.student_id || '';
+      document.getElementById('name').value = data.name || '';
+      document.getElementById('phone').value = data.phone || '';
+      document.getElementById('email').value = data.email || '';
+    } catch (err) {
+      alert('伺服器錯誤，請稍後再試');
     }
+  }
 
-    document.getElementById('profileForm').addEventListener('submit', async e => {
-      e.preventDefault();
-      const formData = {
-        username: document.getElementById('username').value.trim(),
-        student_id: document.getElementById('student_id').value.trim(),
-        name: document.getElementById('name').value.trim(),
-        phone: document.getElementById('phone').value.trim(),
-        email: document.getElementById('email').value.trim(),
-      };
+  document.getElementById('profileForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const token = localStorage.getItem('token');
+    const formData = {
+      username: document.getElementById('username').value.trim(),
+      student_id: document.getElementById('student_id').value.trim(),
+      name: document.getElementById('name').value.trim(),
+      phone: document.getElementById('phone').value.trim(),
+      email: document.getElementById('email').value.trim(),
+    };
 
-      try {
-        const res = await fetch('/update-profile', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(formData)
-        });
-        if (res.ok) {
-          alert('個人資訊更新成功');
-          window.location.href = '/profile';
-        } else {
-          const errText = await res.text();
-          alert('更新失敗：' + errText);
-        }
-      } catch {
-        alert('無法更新，請稍後再試');
+    try {
+      const res = await fetch('/update-profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(formData)
+      });
+
+      if (res.ok) {
+        alert('個人資訊更新成功');
+        window.location.href = '/chat.html';
+      } else {
+        const errText = await res.text();
+        alert('更新失敗：' + errText);
       }
-    });
+    } catch {
+      alert('無法更新，請稍後再試');
+    }
+  });
 
-    loadProfile();
-  </script>
+  loadProfile();
+</script>
+
 </body>
 </html>

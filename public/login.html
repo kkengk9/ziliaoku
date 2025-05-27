@@ -15,12 +15,23 @@
     <input type="text" name="username" placeholder="帳號" required><br><br>
     <input type="password" name="password" placeholder="密碼" required><br><br>
     <button type="submit">登入</button>
+    <button type="button" id="togglePassword" tabindex="-1" style="background:none;border:none;cursor:pointer;vertical-align:middle;">👁</button>
+    <script>
+      document.getElementById('togglePassword').addEventListener('click', function() {
+      const pwd = document.querySelector('input[name="password"]');
+      if (pwd.type === 'password') {
+        pwd.type = 'text';
+      } else {
+        pwd.type = 'password';
+      }
+      });
+    </script>
   </form>
 
   <a href="/change-password.html">修改密碼</a>
   <a href="/change-profile.html">修改個人資訊</a>
   <a href="/register.html">註冊帳號</a>
-
+  <a href="/forgot-password.html">忘記密碼</a>
 
   <p id="msg"></p>
 
@@ -39,15 +50,15 @@
         body: JSON.stringify(data)
       });
 
-      const text = await res.text();
       const msg = document.getElementById('msg');
-      msg.innerText = text;
-
       if (res.ok) {
+        const result = await res.json();
+        localStorage.setItem('token', result.token);
+        msg.innerText = '登入成功';
         msg.style.color = 'green';
-        // 登入成功後導向 profile（裡面會跳轉聊天室）
-        window.location.href = '/profile';
+        window.location.href = '/chat.html';
       } else {
+        msg.innerText = await res.text();
         msg.style.color = 'red';
       }
     });

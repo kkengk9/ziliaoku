@@ -34,6 +34,11 @@
         <input type="email" name="email" class="form-control" required>
       </div>
       <button type="submit" class="btn btn-primary">註冊</button>
+      <select id="clubSelect" class="form-select mb-3">
+        <option value="">-- 請選擇社團 --</option>
+      </select>
+  
+
     </form>
 
     <p id="msg" class="mt-3 text-danger"></p>
@@ -64,12 +69,20 @@
         msg.innerText = text;
         msg.className = res.ok ? 'mt-3 text-success' : 'mt-3 text-danger';
 
-        if (res.ok) form.reset();
+        if (res.ok) {
+          form.reset();
+          // 若有選社團，提醒
+          const club_id = document.getElementById('clubSelect').value;
+          if (club_id) {
+            alert('註冊成功，請登入後進行社團申請！');
+          }
+        }
       } catch (err) {
         const msg = document.getElementById('msg');
         msg.innerText = '網路錯誤，請稍後再試';
         msg.className = 'mt-3 text-danger';
       }
+      loadClubs();
     });
   </script>
 </body>
