@@ -1,0 +1,17 @@
+{
+  "name": "ziliaoku",
+  "version": "1.0.0",
+  "description": "社團聊天室系統",
+  "main": "serve.js",
+  "scripts": {
+    "start": "node serve.js"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.0",
+    "body-parser": "^1.20.2",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.0",
+    "multer": "^1.4.4",
+    "sqlite3": "^5.1.6"
+  }
+}
