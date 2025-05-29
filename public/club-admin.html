@@ -28,6 +28,7 @@
 <body>
 
   <h2>聊天室</h2>
+  <a href="/club-manage.html" class="btn btn-link">社團管理</a>
 
   <div class="mb-3">
     <label for="category" class="form-label">選擇區域：</label>
@@ -167,14 +168,60 @@
     });
 
     loadCategories();
-    document.getElementById('category').addEventListener('change', function() {
+    document.getElementById('category').addEventListener('change', async function () {
       const val = this.value;
+
       if (val === 'event' || val === 'academic') {
         window.location.href = 'chat.html';
-      } else {
-        loadMessages();
+        return;
       }
+
+      const match = val.match(/^club-(\d+)$/);
+      if (match) {
+        const clubId = match[1];
+        const ok = await checkTokenBeforeEnter(clubId);
+        if (!ok) return; // 驗證失敗已跳轉
+      }
+
+      loadMessages();
     });
+    async function checkTokenBeforeEnter(clubId) {
+      const savedToken = localStorage.getItem(`club-${clubId}-token`);
+      if (savedToken) {
+        const verified = await verifyToken(clubId, savedToken);
+        if (verified) return true;
+        // Token 失效：移除並重新要求
+        localStorage.removeItem(`club-${clubId}-token`);
+      }
+
+      const tokenInput = prompt("請輸入該社團的 token 才能進入聊天室：");
+      if (!tokenInput) {
+        alert("⚠️ 未輸入 token，將返回聊天室首頁");
+        window.location.href = 'chat.html';
+        return false;
+      }
+
+      const verified = await verifyToken(clubId, tokenInput);
+      if (!verified) {
+        alert("❌ Token 驗證失敗，將返回聊天室首頁");
+        window.location.href = 'chat.html';
+        return false;
+      }
+
+      // 驗證通過，儲存 token
+      localStorage.setItem(`club-${clubId}-token`, tokenInput);
+      return true;
+    }
+
+    async function verifyToken(clubId, token) {
+      try {
+        const res = await fetch('/clubs');
+        const clubs = await res.json();
+        return clubs.some(c => c.id === parseInt(clubId) && c.token === token);
+      } catch {
+        return false;
+      }
+    }
     setInterval(loadMessages, 5000);
   </script>
 

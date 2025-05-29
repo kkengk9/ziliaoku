@@ -10,84 +10,195 @@
     <h2>修改個人資訊</h2>
     <form id="profileForm">
       <div class="mb-3">
-        <label for="username" class="form-label">帳號 (Username)</label>
-        <input type="text" id="username" name="username" class="form-control" required />
+        <label class="form-label">帳號</label>
+        <input type="text" id="username" class="form-control" required />
       </div>
       <div class="mb-3">
-        <label for="student_id" class="form-label">學號 (Student ID)</label>
-        <input type="text" id="student_id" name="student_id" class="form-control" required />
+        <label class="form-label">學號</label>
+        <input type="text" id="student_id" class="form-control" required />
       </div>
       <div class="mb-3">
-        <label for="name" class="form-label">姓名 (Name)</label>
-        <input type="text" id="name" name="name" class="form-control" required />
+        <label class="form-label">姓名</label>
+        <input type="text" id="name" class="form-control" required />
       </div>
       <div class="mb-3">
-        <label for="phone" class="form-label">電話 (Phone)</label>
-        <input type="text" id="phone" name="phone" class="form-control" required />
+        <label class="form-label">電話</label>
+        <input type="text" id="phone" class="form-control" required />
       </div>
       <div class="mb-3">
-        <label for="email" class="form-label">電子郵件 (Email)</label>
-        <input type="email" id="email" name="email" class="form-control" required />
+        <label class="form-label">Email</label>
+        <input type="email" id="email" class="form-control" required />
       </div>
+
+      <div class="mb-3 row">
+        <div class="col-md-6">
+          <label class="form-label">選擇社團</label>
+          <select id="clubSelect" class="form-select">
+            <option value="">請選擇社團</option>
+            <!-- 社團選項會自動載入 -->
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">已選社團</label>
+          <ul id="selectedClubs" class="list-group" style="min-height: 38px;">
+            <!-- 已選社團顯示在這裡 -->
+          </ul>
+        </div>
+      </div>
+
       <button type="submit" class="btn btn-primary">儲存</button>
     </form>
+    <p id="msg" class="mt-3 text-danger"></p>
   </div>
 
   <script>
-  async function loadProfile() {
     const token = localStorage.getItem('token');
-    try {
-      const res = await fetch('/profile-data', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) return alert('無法取得個人資料');
+    const selectedClubIds = [];
+    const selectedClubsUl = document.getElementById('selectedClubs');
+    const clubSelect = document.getElementById('clubSelect');
 
-      const data = await res.json();
-      document.getElementById('username').value = data.username || '';
-      document.getElementById('student_id').value = data.student_id || '';
-      document.getElementById('name').value = data.name || '';
-      document.getElementById('phone').value = data.phone || '';
-      document.getElementById('email').value = data.email || '';
-    } catch (err) {
-      alert('伺服器錯誤，請稍後再試');
+    function renderSelectedClubs() {
+      selectedClubsUl.innerHTML = '';
+      selectedClubIds.forEach(id => {
+        const opt = clubSelect.querySelector(`option[value="${id}"]`);
+        if (opt) {
+          const li = document.createElement('li');
+          li.className = 'list-group-item d-flex justify-content-between align-items-center';
+          li.textContent = opt.textContent;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn btn-sm btn-outline-danger ms-2';
+          btn.textContent = '移除';
+          btn.onclick = () => {
+            selectedClubIds.splice(selectedClubIds.indexOf(id), 1);
+            renderSelectedClubs();
+          };
+          li.appendChild(btn);
+          selectedClubsUl.appendChild(li);
+        }
+      });
     }
-  }
 
-  document.getElementById('profileForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const token = localStorage.getItem('token');
-    const formData = {
-      username: document.getElementById('username').value.trim(),
-      student_id: document.getElementById('student_id').value.trim(),
-      name: document.getElementById('name').value.trim(),
-      phone: document.getElementById('phone').value.trim(),
-      email: document.getElementById('email').value.trim(),
-    };
-
-    try {
-      const res = await fetch('/update-profile', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (res.ok) {
-        alert('個人資訊更新成功');
-        window.location.href = '/chat.html';
-      } else {
-        const errText = await res.text();
-        alert('更新失敗：' + errText);
+    clubSelect.addEventListener('change', function () {
+      const val = clubSelect.value;
+      if (val && !selectedClubIds.includes(val)) {
+        selectedClubIds.push(val);
+        renderSelectedClubs();
       }
-    } catch {
-      alert('無法更新，請稍後再試');
+      clubSelect.selectedIndex = 0;
+    });
+
+    async function loadProfile() {
+      try {
+        const res = await fetch('/profile-data', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return alert('無法取得個人資料');
+        const data = await res.json();
+
+        document.getElementById('username').value = data.username || '';
+        document.getElementById('student_id').value = data.student_id || '';
+        document.getElementById('name').value = data.name || '';
+        document.getElementById('phone').value = data.phone || '';
+        document.getElementById('email').value = data.email || '';
+
+        // 先載入社團選單
+        await loadClubs();
+
+        // 再載入已加入的社團
+        const myClubsRes = await fetch('/my-clubs', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const myClubs = await myClubsRes.json();
+        myClubs.forEach(c => {
+          if (!selectedClubIds.includes(String(c.id))) {
+            selectedClubIds.push(String(c.id));
+          }
+        });
+        renderSelectedClubs();
+      } catch {
+        alert('伺服器錯誤，請稍後再試');
+      }
     }
-  });
 
-  loadProfile();
-</script>
+    async function loadClubs() {
+      const res = await fetch('/clubs');
+      const clubs = await res.json();
+      const select = document.getElementById('clubSelect');
+      select.innerHTML = '<option value="">請選擇社團</option>';
+      clubs.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        select.appendChild(opt);
+      });
+    }
 
+    document.getElementById('profileForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const formData = {
+        username: document.getElementById('username').value.trim(),
+        student_id: document.getElementById('student_id').value.trim(),
+        name: document.getElementById('name').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+        email: document.getElementById('email').value.trim(),
+      };
+
+      try {
+        const res = await fetch('/update-profile', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(formData)
+        });
+
+        if (res.ok) {
+          // 比對要加入與要退出的社團
+          const currentRes = await fetch('/my-clubs', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const currentClubs = await currentRes.json();
+          const currentIds = currentClubs.map(c => String(c.id));
+
+          const toJoin = selectedClubIds.filter(id => !currentIds.includes(id));
+          const toLeave = currentIds.filter(id => !selectedClubIds.includes(id));
+
+          for (const club_id of toJoin) {
+            await fetch('/join-club', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+              },
+              body: JSON.stringify({ club_id })
+            });
+          }
+
+          for (const club_id of toLeave) {
+            await fetch('/leave-club', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+              },
+              body: JSON.stringify({ club_id })
+            });
+          }
+
+          alert('個人資訊與社團更新成功');
+          window.location.href = '/chat.html';
+        } else {
+          const errText = await res.text();
+          alert('更新失敗：' + errText);
+        }
+      } catch {
+        alert('無法更新，請稍後再試');
+      }
+    });
+
+    loadProfile();
+  </script>
 </body>
 </html>

@@ -70,33 +70,46 @@ app.post('/forgot-password', (req, res) => {
   });
 });
 
+let insertInProgress = new Set();
+
 app.post('/register', async (req, res) => {
-  console.log('收到註冊請求:', req.body); // 加在這裡
   const { username, password, student_id, name, phone, email } = req.body;
-  if (!username || !password || !student_id || !name || !phone || !email) {
-    return res.status(400).send('請完整填寫所有欄位');
+
+  if (insertInProgress.has(username)) {
+    return res.status(429).send('該帳號正在註冊中，請稍後再試');
   }
 
-  try {
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const sql = `INSERT INTO users (username, password, student_id, name, phone, email)
-                 VALUES (?, ?, ?, ?, ?, ?)`;
+  insertInProgress.add(username);
 
-    db.run(sql, [username, hashedPassword, student_id, name, phone, email], function (err) {
-      if (err) {
-        console.log('註冊錯誤:', err); // 加這一行
-        if (err.message.includes('UNIQUE constraint failed')) {
-          return res.status(400).send('帳號已存在');
+  db.get('SELECT id FROM users WHERE username = ?', [username], async (err, row) => {
+    if (err) {
+      insertInProgress.delete(username);
+      return res.status(500).send('資料庫錯誤');
+    }
+    if (row) {
+      insertInProgress.delete(username);
+      return res.status(400).send('帳號已存在');
+    }
+
+    try {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const sql = `INSERT INTO users (username, password, student_id, name, phone, email)
+                   VALUES (?, ?, ?, ?, ?, ?)`;
+
+      db.run(sql, [username, hashedPassword, student_id, name, phone, email], function (err2) {
+        insertInProgress.delete(username);
+        if (err2) {
+          return res.status(500).send('資料庫錯誤');
         }
-        return res.status(500).send('資料庫錯誤');
-      }
-      res.send('註冊成功，請返回登入');
-    });
-  } catch (error) {
-    console.log('註冊 try/catch 錯誤:', error); // 可選，加強除錯
-    res.status(500).send('伺服器錯誤');
-  }
+        res.send('註冊成功，請返回登入');
+      });
+    } catch (error) {
+      insertInProgress.delete(username);
+      res.status(500).send('伺服器錯誤');
+    }
+  });
 });
+
 
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
@@ -125,6 +138,16 @@ app.get('/profile-data', authMiddleware, (req, res) => {
   });
 });
 
+app.post('/leave-club', authMiddleware, (req, res) => {
+  const { club_id } = req.body;
+  if (!club_id) return res.status(400).send('缺少社團 ID');
+
+  db.run('DELETE FROM club_members WHERE user_id = ? AND club_id = ? AND role = "member"', [req.user.id, club_id], function(err) {
+    if (err) return res.status(500).send('退出失敗');
+    if (this.changes === 0) return res.status(400).send('只有一般成員可以退出');
+    res.send('已退出社團');
+  });
+});
 // 上傳 API（需登入）
 app.post('/upload', authMiddleware, upload.single('file'), (req, res) => {
   const file = req.file;
@@ -217,18 +240,37 @@ app.post('/clubs', authMiddleware, (req, res) => {
   const { name, description } = req.body;
   if (!name) return res.status(400).send('請輸入社團名稱');
 
-  const sql = 'INSERT INTO clubs (name, description) VALUES (?, ?)';
-  db.run(sql, [name, description || ''], function (err) {
+  // Step 1: 先插入社團（不含 token）
+  db.run('INSERT INTO clubs (name, description) VALUES (?, ?)', [name, description || ''], function (err) {
     if (err) return res.status(500).send('建立失敗，可能社團已存在');
 
-    // 建立者為社長
-    db.run('INSERT INTO club_members (user_id, club_id, role, approved) VALUES (?, ?, ?, 1)',
-      [req.user.id, this.lastID, 'president'],
-      (err) => {
-        if (err) return res.status(500).send('社長建立失敗');
-        res.send('社團建立成功');
-      });
+    const clubId = this.lastID;
+    const token = Buffer.from(`${name}-${clubId}`).toString('base64');
+
+    // Step 2: 更新 token
+    db.run('UPDATE clubs SET token = ? WHERE id = ?', [token, clubId]);
+
+    // Step 3: 建立者為社長
+    db.run('INSERT INTO club_members (user_id, club_id, role, approved) VALUES (?, ?, "president", 1)', [req.user.id, clubId], (err2) => {
+      if (err2) return res.status(500).send('社長建立失敗');
+      res.send(`社團建立成功，Token：${token}`);
+    });
   });
+});
+
+app.get('/club-token/:club_id', authMiddleware, (req, res) => {
+  const club_id = req.params.club_id;
+
+  db.get('SELECT * FROM club_members WHERE user_id = ? AND club_id = ? AND role = "president"',
+    [req.user.id, club_id], (err, row) => {
+      if (err) return res.status(500).send('查詢錯誤');
+      if (!row) return res.status(403).send('僅社長可查詢 token');
+
+      db.get('SELECT token FROM clubs WHERE id = ?', [club_id], (err2, club) => {
+        if (err2 || !club) return res.status(404).send('找不到社團');
+        res.json({ token: club.token });
+      });
+    });
 });
 
 // 加入社團申請
@@ -246,6 +288,24 @@ app.post('/join-club', authMiddleware, (req, res) => {
         res.send('已送出加入申請');
       });
   });
+});
+
+// 取得社團現有核准成員
+app.get('/club-members/:club_id', authMiddleware, (req, res) => {
+  const club_id = req.params.club_id;
+
+  db.get('SELECT * FROM club_members WHERE user_id = ? AND club_id = ? AND role IN ("president", "officer") AND approved = 1',
+    [req.user.id, club_id], (err, roleRow) => {
+      if (!roleRow) return res.status(403).send('你沒有權限查看成員');
+
+      const sql = `SELECT u.id, u.name, u.username, cm.role FROM users u
+                   JOIN club_members cm ON u.id = cm.user_id
+                   WHERE cm.club_id = ? AND cm.approved = 1`;
+      db.all(sql, [club_id], (err, rows) => {
+        if (err) return res.status(500).send('無法取得成員');
+        res.json(rows);
+      });
+    });
 });
 
 // 取得所有社團（給前端列表用）
@@ -274,6 +334,79 @@ app.get('/club-applicants/:club_id', authMiddleware, (req, res) => {
     });
 });
 
+// 社長轉讓職位給其他人
+app.post('/clubs/transfer-president', authMiddleware, (req, res) => {
+  const { club_id, target_user_id } = req.body;
+  if (!club_id || !target_user_id) return res.status(400).send('缺少必要參數');
+
+  // 驗證執行者是否為該社團社長
+  db.get('SELECT * FROM club_members WHERE user_id = ? AND club_id = ? AND role = "president" AND approved = 1',
+    [req.user.id, club_id],
+    (err, row) => {
+      if (err) return res.status(500).send('查詢錯誤');
+      if (!row) return res.status(403).send('只有社長才能轉讓職位');
+
+      // 更新目標為新社長
+      db.run('UPDATE club_members SET role = "president" WHERE user_id = ? AND club_id = ?',
+        [target_user_id, club_id],
+        function (err) {
+          if (err || this.changes === 0) return res.status(500).send('轉讓失敗');
+
+          // 將原社長降級為幹部
+          db.run('UPDATE club_members SET role = "officer" WHERE user_id = ? AND club_id = ?',
+            [req.user.id, club_id],
+            function (err2) {
+              if (err2) return res.status(500).send('降級原社長失敗');
+              res.send('職位已成功轉讓');
+            });
+        });
+    });
+});
+
+// 幹部轉讓職位
+app.post('/clubs/transfer-officer', authMiddleware, (req, res) => {
+  const { club_id, target_user_id } = req.body;
+  if (!club_id || !target_user_id) return res.status(400).send('缺少必要參數');
+
+  // 驗證執行者是否為社長或幹部
+  const sqlCheck = `SELECT * FROM club_members 
+                    WHERE user_id = ? AND club_id = ? AND role IN ('president', 'officer') AND approved = 1`;
+  db.get(sqlCheck, [req.user.id, club_id], (err, row) => {
+    if (err) return res.status(500).send('查詢錯誤');
+    if (!row) return res.status(403).send('只有社長或幹部才能轉讓職位');
+
+    // 確認目標是核准的一般成員（不能是現任幹部或社長）
+    const sqlTarget = `SELECT * FROM club_members 
+                       WHERE user_id = ? AND club_id = ? AND approved = 1`;
+    db.get(sqlTarget, [target_user_id, club_id], (err2, targetRow) => {
+      if (err2) return res.status(500).send('查詢失敗');
+      if (!targetRow) return res.status(400).send('找不到該成員或尚未核准');
+      if (['officer', 'president'].includes(targetRow.role)) {
+        return res.status(400).send('對方已是幹部或社長');
+      }
+
+      // 轉讓目標為 officer
+      db.run('UPDATE club_members SET role = "officer" WHERE user_id = ? AND club_id = ?',
+        [target_user_id, club_id],
+        function (err3) {
+          if (err3 || this.changes === 0) return res.status(500).send('轉讓失敗');
+
+          // 如果執行者是 officer，降為 member；如果是社長，角色不變
+          if (row.role === 'officer') {
+            db.run('UPDATE club_members SET role = "member" WHERE user_id = ? AND club_id = ?',
+              [req.user.id, club_id],
+              function (err4) {
+                if (err4) return res.status(500).send('降級失敗');
+                res.send('幹部職位已轉讓');
+              });
+          } else {
+            res.send('幹部職位已轉讓');
+          }
+        });
+    });
+  });
+});
+
 // 核准成員加入社團
 app.post('/approve-member', authMiddleware, (req, res) => {
   const { club_id, user_id } = req.body;
@@ -288,6 +421,30 @@ app.post('/approve-member', authMiddleware, (req, res) => {
           if (err) return res.status(500).send('更新失敗');
           res.send('已核准');
         });
+    });
+});
+
+// 刪除社團（社長限定）
+app.delete('/clubs/:id', authMiddleware, (req, res) => {
+  const club_id = parseInt(req.params.id);
+  if (!club_id) return res.status(400).send('缺少社團 ID');
+
+  // 確認是否為該社團的社長
+  db.get('SELECT * FROM club_members WHERE user_id = ? AND club_id = ? AND role = "president"',
+    [req.user.id, club_id],
+    (err, row) => {
+      if (err) return res.status(500).send('查詢錯誤');
+      if (!row) return res.status(403).send('只有社長可以刪除社團');
+
+      // 刪除 club_members、messages、clubs
+      db.serialize(() => {
+        db.run('DELETE FROM club_members WHERE club_id = ?', [club_id]);
+        db.run('DELETE FROM messages WHERE category = ?', [`club-${club_id}`]);
+        db.run('DELETE FROM clubs WHERE id = ?', [club_id], function (err2) {
+          if (err2) return res.status(500).send('刪除社團失敗');
+          res.send('社團與聊天室已刪除');
+        });
+      });
     });
 });
 

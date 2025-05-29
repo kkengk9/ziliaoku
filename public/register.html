@@ -33,18 +33,156 @@
         <label class="form-label">Email</label>
         <input type="email" name="email" class="form-control" required>
       </div>
-      <button type="submit" class="btn btn-primary">註冊</button>
-      <select id="clubSelect" class="form-select mb-3">
-        <option value="">-- 請選擇社團 --</option>
-      </select>
-  
+      <div class="mb-3 row">
+        <div class="col-md-6">
+          <label class="form-label">選擇社團</label>
+          <select id="clubSelect" class="form-select">
+        <!-- 社團選項自動載入 -->
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">已選社團</label>
+          <ul id="selectedClubs" class="list-group" style="min-height: 38px;">
+        <!-- 已選社團顯示在這裡 -->
+          </ul>
+        </div>
+      </div>
+      <script>
+        // 新增已選社團的 JS
+        const selectedClubIds = [];
+        const selectedClubsUl = document.getElementById('selectedClubs');
+        const clubSelect = document.getElementById('clubSelect');
 
+        function renderSelectedClubs() {
+          selectedClubsUl.innerHTML = '';
+          selectedClubIds.forEach(id => {
+        const opt = clubSelect.querySelector(`option[value="${id}"]`);
+        if (opt) {
+          const li = document.createElement('li');
+          li.className = 'list-group-item d-flex justify-content-between align-items-center';
+          li.textContent = opt.textContent;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn btn-sm btn-outline-danger ms-2';
+          btn.textContent = '移除';
+          btn.onclick = () => {
+            selectedClubIds.splice(selectedClubIds.indexOf(id), 1);
+            renderSelectedClubs();
+          };
+          li.appendChild(btn);
+          selectedClubsUl.appendChild(li);
+        }
+          });
+        }
+
+        clubSelect.addEventListener('change', function () {
+          const val = clubSelect.value;
+          if (val && !selectedClubIds.includes(val)) {
+        selectedClubIds.push(val);
+        renderSelectedClubs();
+          }
+          clubSelect.selectedIndex = 0;
+        });
+
+        // 修改 loadClubs 讓預設有一個空 option
+        async function loadClubs() {
+          const res = await fetch('/clubs');
+          const clubs = await res.json();
+          const select = document.getElementById('clubSelect');
+          select.innerHTML = '<option value="">請選擇社團</option>';
+          clubs.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        select.appendChild(opt);
+          });
+        }
+        loadClubs();
+
+        // 修改表單送出時取得 selectedClubIds
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const form = e.target;
+          const data = {
+        username: form.username.value.trim(),
+        password: form.password.value,
+        student_id: form.student_id.value.trim(),
+        name: form.name.value.trim(),
+        phone: form.phone.value.trim(),
+        email: form.email.value.trim(),
+          };
+
+          // 這裡改用 selectedClubIds
+          try {
+        const res = await fetch('/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        const msg = document.getElementById('msg');
+        const text = await res.text();
+        msg.innerText = text;
+        msg.className = res.ok ? 'mt-3 text-success' : 'mt-3 text-danger';
+
+        if (res.ok) {
+          // 登入帳號取得 token
+          const loginRes = await fetch('/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: data.username, password: data.password })
+          });
+          if (loginRes.ok) {
+            const loginData = await loginRes.json();
+            localStorage.setItem('token', loginData.token);
+
+            // 對每個選到的社團送加入申請
+            for (const club_id of selectedClubIds) {
+          await fetch('/join-club', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${loginData.token}`
+            },
+            body: JSON.stringify({ club_id })
+          });
+            }
+
+            alert('註冊成功，已自動送出加入社團申請，請等待審核！');
+            form.reset();
+            selectedClubIds.length = 0;
+            renderSelectedClubs();
+          } else {
+            alert('註冊成功，請手動登入以加入社團');
+          }
+        }
+          } catch (err) {
+        const msg = document.getElementById('msg');
+        msg.innerText = '網路錯誤，請稍後再試';
+        msg.className = 'mt-3 text-danger';
+          }
+        });
+      </script>
+      <button type="submit" class="btn btn-primary">註冊</button>
     </form>
 
     <p id="msg" class="mt-3 text-danger"></p>
   </div>
 
   <script>
+    async function loadClubs() {
+      const res = await fetch('/clubs');
+      const clubs = await res.json();
+      const select = document.getElementById('clubSelect');
+      clubs.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        select.appendChild(opt);
+      });
+    }
+    loadClubs();
+
     document.getElementById('registerForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const form = e.target;
@@ -57,6 +195,9 @@
         email: form.email.value.trim(),
       };
 
+      const selectedOptions = [...document.getElementById('clubSelect').selectedOptions];
+      const selectedClubIds = selectedOptions.map(opt => opt.value);
+
       try {
         const res = await fetch('/register', {
           method: 'POST',
@@ -64,17 +205,38 @@
           body: JSON.stringify(data)
         });
 
-        const text = await res.text();
         const msg = document.getElementById('msg');
+        const text = await res.text();
         msg.innerText = text;
         msg.className = res.ok ? 'mt-3 text-success' : 'mt-3 text-danger';
 
         if (res.ok) {
-          form.reset();
-          // 若有選社團，提醒
-          const club_id = document.getElementById('clubSelect').value;
-          if (club_id) {
-            alert('註冊成功，請登入後進行社團申請！');
+          // 登入帳號取得 token
+          const loginRes = await fetch('/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: data.username, password: data.password })
+          });
+          if (loginRes.ok) {
+            const loginData = await loginRes.json();
+            localStorage.setItem('token', loginData.token);
+
+            // 對每個選到的社團送加入申請
+            for (const club_id of selectedClubIds) {
+              await fetch('/join-club', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${loginData.token}`
+                },
+                body: JSON.stringify({ club_id })
+              });
+            }
+
+            alert('註冊成功，已自動送出加入社團申請，請等待審核！');
+            form.reset();
+          } else {
+            alert('註冊成功，請手動登入以加入社團');
           }
         }
       } catch (err) {
@@ -82,7 +244,6 @@
         msg.innerText = '網路錯誤，請稍後再試';
         msg.className = 'mt-3 text-danger';
       }
-      loadClubs();
     });
   </script>
 </body>

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>社團管理</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    body { padding: 2rem; max-width: 900px; margin: auto; }
+    .section { margin-top: 2.5rem; }
+    .section h4 { border-bottom: 2px solid #dee2e6; padding-bottom: 0.5rem; margin-bottom: 1.5rem; }
+    .btn + .btn { margin-left: 0.5rem; }
+    .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 10000; }
+  </style>
+</head>
+<body>
+  <h2 class="mb-4 text-primary">📋 社團管理介面</h2>
+
+  <div class="section">
+    <label class="form-label">選擇你的社團：</label>
+    <select id="clubSelect" class="form-select"></select>
+  </div>
+
+  <div class="section">
+    <h4>👥 申請名單審核</h4>
+    <ul id="applicantsList" class="list-group"></ul>
+  </div>
+
+  <div class="section row">
+    <div class="col-md-6">
+      <h4>👑 轉讓社長職位</h4>
+      <select id="transferPresidentSelect" class="form-select mb-2"></select>
+      <button class="btn btn-warning w-100" onclick="transferPresident()">轉讓社長</button>
+    </div>
+    <div class="col-md-6">
+      <h4>🎖️ 轉讓幹部職位</h4>
+      <select id="transferOfficerSelect" class="form-select mb-2"></select>
+      <button class="btn btn-secondary w-100" onclick="transferOfficer()">轉讓幹部</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h4 class="text-danger">❌ 刪除整個社團</h4>
+    <button class="btn btn-outline-danger w-100" onclick="deleteClub()">⚠️ 刪除社團與聊天室</button>
+  </div>
+
+  <div class="toast-container position-fixed top-0 end-0 p-3" id="toastArea"></div>
+
+  <script>
+    const token = localStorage.getItem('token');
+
+    function showToast(message, success = true) {
+      const toast = document.createElement('div');
+      toast.className = `toast align-items-center text-white ${success ? 'bg-success' : 'bg-danger'} border-0 show`;
+      toast.setAttribute('role', 'alert');
+      toast.setAttribute('aria-live', 'assertive');
+      toast.setAttribute('aria-atomic', 'true');
+      toast.innerHTML = `
+        <div class="d-flex">
+          <div class="toast-body">${message}</div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>`;
+      document.getElementById('toastArea').appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    async function loadClubs() {
+      const res = await fetch('/my-clubs', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      const select = document.getElementById('clubSelect');
+      select.innerHTML = '';
+      data.filter(c => c.role === 'president').forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        select.appendChild(opt);
+      });
+      if (select.value) {
+        loadApplicants(select.value);
+        loadMembers(select.value);
+      }
+    }
+
+    async function loadApplicants(club_id) {
+      const res = await fetch(`/club-applicants/${club_id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const list = document.getElementById('applicantsList');
+      const data = await res.json();
+      list.innerHTML = '';
+      if (data.length === 0) {
+        list.innerHTML = `<li class="list-group-item text-muted">目前無待審核申請</li>`;
+      } else {
+        data.forEach(u => {
+          const li = document.createElement('li');
+          li.className = 'list-group-item d-flex justify-content-between align-items-center';
+          li.innerHTML = `<span>${u.name} (${u.username})</span>
+            <button class="btn btn-sm btn-success" onclick="approve(${club_id}, ${u.id})">核准</button>`;
+          list.appendChild(li);
+        });
+      }
+    }
+
+    async function approve(club_id, user_id) {
+      const res = await fetch('/approve-member', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ club_id, user_id })
+      });
+      showToast(await res.text(), res.ok);
+      loadApplicants(club_id);
+      loadMembers(club_id);
+    }
+
+    async function loadMembers(club_id) {
+  const res = await fetch(`/club-members/${club_id}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const data = await res.json();
+  const presSel = document.getElementById('transferPresidentSelect');
+  const offSel = document.getElementById('transferOfficerSelect');
+  presSel.innerHTML = '';
+  offSel.innerHTML = '';
+  data.forEach(m => {
+    const opt1 = document.createElement('option');
+    opt1.value = m.id;
+    opt1.textContent = `${m.name} (${m.username}) - ${m.role}`;
+    const opt2 = opt1.cloneNode(true);
+    presSel.appendChild(opt1);
+    offSel.appendChild(opt2);
+  });
+}
+
+
+    async function transferPresident() {
+      const club_id = document.getElementById('clubSelect').value;
+      const user_id = document.getElementById('transferPresidentSelect').value;
+      const res = await fetch('/clubs/transfer-president', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ club_id, target_user_id: user_id })
+      });
+      showToast(await res.text(), res.ok);
+    }
+
+    async function transferOfficer() {
+      const club_id = document.getElementById('clubSelect').value;
+      const user_id = document.getElementById('transferOfficerSelect').value;
+      const res = await fetch('/clubs/transfer-officer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ club_id, target_user_id: user_id })
+      });
+      showToast(await res.text(), res.ok);
+    }
+
+    async function deleteClub() {
+      const club_id = document.getElementById('clubSelect').value;
+      if (!confirm('⚠️ 你確定要刪除這個社團與所有訊息嗎？此動作無法復原！')) return;
+      const res = await fetch(`/clubs/${club_id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      showToast(await res.text(), res.ok);
+      loadClubs();
+    }
+
+    document.getElementById('clubSelect').addEventListener('change', (e) => {
+      loadApplicants(e.target.value);
+      loadMembers(e.target.value);
+    });
+
+    loadClubs();
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

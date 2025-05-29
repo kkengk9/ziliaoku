@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>建立社團</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 2rem; max-width: 500px; margin: auto; }
+    #msg { margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h2>建立社團</h2>
+  <form id="clubForm">
+    <label>社團名稱：</label><br>
+    <input type="text" id="name" required><br><br>
+
+    <label>簡介：</label><br>
+    <textarea id="description" rows="4"></textarea><br><br>
+
+    <button type="submit">建立社團</button>
+  </form>
+  <p id="msg"></p>
+
+  <script>
+    document.getElementById('clubForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const token = localStorage.getItem('token');
+      const name = document.getElementById('name').value.trim();
+      const description = document.getElementById('description').value.trim();
+
+      const res = await fetch('/clubs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ name, description })
+      });
+
+      const msg = document.getElementById('msg');
+      msg.innerText = await res.text();
+      msg.style.color = res.ok ? 'green' : 'red';
+      if (res.ok) document.getElementById('clubForm').reset();
+    });
+  </script>
+</body>
+</html>
