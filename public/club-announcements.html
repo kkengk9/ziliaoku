@@ -64,6 +64,9 @@
       const content = btn.closest('li').querySelector('textarea').value.trim();
       if (!content) return alert('內容不得為空');
 
+      btn.disabled = true;
+      btn.textContent = '儲存中...';
+
       const res = await fetch('/messages/update-announcement', {
         method: 'POST',
         headers: {
@@ -72,8 +75,14 @@
         },
         body: JSON.stringify({ id, content })
       });
-      alert(await res.text());
+
+      const msg = await res.text();
+      alert(msg);
+
+      btn.disabled = false;
+      btn.textContent = '儲存';
     }
+
 
     async function deleteAnnouncement(id) {
       if (!confirm('確定要刪除這則公告嗎？')) return;

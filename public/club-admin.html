@@ -41,12 +41,14 @@
       <option value="chat">聊天區</option>
       <option value="announcements">公告區</option>
     </select>
+    <a href="club-announcements.html" class="btn btn-outline-secondary">
+    ➤ 公告管理頁
+    </a>
   </div>
 
-  <div id="announcementLinkContainer" class="mb-3" style="display:none;">
-  <a href="club-announcements.html" class="btn btn-warning">
-    前往公告管理（僅社長/幹部可用）
-  </a>
+  <div class="form-check mb-3">
+    <input class="form-check-input" type="checkbox" id="isAnnouncement">
+    <label class="form-check-label" for="isAnnouncement">發布為公告（僅社長/幹部可用）</label>
   </div>
 
   <div class="chat-box" id="chatBox"></div>
@@ -116,7 +118,8 @@
       e.preventDefault();
       const category = document.getElementById('category').value;
       const content = document.getElementById('message').value.trim();
-      const is_announcement = document.getElementById('isAnnouncement').checked;
+      const is_announcement = document.getElementById('isAnnouncement').checked ? 1 : 0;
+
       if (!content) return alert('請輸入訊息');
 
       try {
@@ -130,6 +133,7 @@
         });
         if (res.ok) {
           document.getElementById('message').value = '';
+          document.getElementById('isAnnouncement').checked = false; // ✅ 自動取消勾選
           loadMessages();
         } else {
           const errText = await res.text();
@@ -169,20 +173,6 @@
     });
 
     loadCategories();
-      // 只有社長/幹部才顯示公告管理按鈕
-    (async function showAnnouncementLinkIfAdmin() {
-      const token = localStorage.getItem('token');
-      try {
-        const res = await fetch('/profile-data', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (!res.ok) return;
-        const user = await res.json();
-        if (user.role === 'president' || user.role === 'officer') {
-          document.getElementById('announcementLinkContainer').style.display = '';
-        }
-      } catch {}
-    })();
     document.getElementById('category').addEventListener('change', async function () {
       const val = this.value;
 

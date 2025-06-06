@@ -210,18 +210,6 @@ app.post('/change-password', authMiddleware, async (req, res) => {
   });
 });
 
-app.post('/send', authMiddleware, (req, res) => {
-  const { category, content } = req.body;
-  if (!category || !content) return res.status(400).send('缺少分類或內容');
-
-  const sql = `INSERT INTO messages (user_id, username, category, content, timestamp)
-               VALUES (?, ?, ?, ?, datetime('now','localtime'))`;
-  db.run(sql, [req.user.id, req.user.username, category, content], function (err) {
-    if (err) return res.status(500).send('儲存訊息失敗');
-    res.send('訊息已儲存');
-  });
-});
-
 app.get('/messages', authMiddleware, (req, res) => {
   const category = req.query.category;
   if (!category) return res.status(400).send('缺少分類');
