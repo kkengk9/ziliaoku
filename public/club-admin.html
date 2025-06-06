@@ -43,9 +43,9 @@
     </select>
   </div>
 
-  <div class="form-check mb-3">
-    <input class="form-check-input" type="checkbox" id="isAnnouncement">
-    <label class="form-check-label" for="isAnnouncement">發布為公告（僅社長/幹部可用）</label>
+  <div id="announcementCheckContainer" class="form-check mb-3" style="display:none;">
+  <input class="form-check-input" type="checkbox" id="isAnnouncement">
+  <label class="form-check-label" for="isAnnouncement">發布為公告（僅社長/幹部可用）</label>
   </div>
 
   <div class="chat-box" id="chatBox"></div>
@@ -168,6 +168,21 @@
     });
 
     loadCategories();
+     // 動態顯示「發布為公告」checkbox（僅社長/幹部可見）
+    (async function showAnnouncementCheckIfAdmin() {
+      const token = localStorage.getItem('token');
+      try {
+        const res = await fetch('/profile-data', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const user = await res.json();
+        // 假設 user.role 會是 'president' 或 'officer' 才能顯示
+        if (user.role === 'president' || user.role === 'officer') {
+          document.getElementById('announcementCheckContainer').style.display = '';
+        }
+      } catch {}
+    })();
     document.getElementById('category').addEventListener('change', async function () {
       const val = this.value;
 
